@@ -1,152 +1,179 @@
-load "stack.ml";;
-load "dict.ml";;
-load "utils.ml";;
-
-#open "io";;
-#open "stack";;
-#open "dict";;
-#open "utils";;
-
-type types = INT of int | FLOAT of float | STR of string | BOOL of bool;;
-
-type instructions =
-	NOP | POP | PUSH of types | STORE of string | LOAD of string
-	| ADD | SUB | MUL | DIV | MOD | UNARY_MINUS
-	| AND | OR | NOT
-	| EQ | NE | LT | LE | GT | GE
-	| PRINT
-	| BRANCH of code * code
-	| WHILE of code
-
-and code == instructions list
-;;
-
-type context = {s : types stack; env : types dict};;
-
-let process_arithmetic_binop context int_op float_op =
-	match pop context.s, pop context.s with
-		INT(i1), INT(i2) -> push context.s (INT(int_op i1 i2))
-		| FLOAT(f1), FLOAT(f2) -> push context.s (FLOAT(float_op f1 f2))
-		| _ -> invalid_arg "Invalid operand type."
-;;
-
-let process_boolean_binop context op =
-	match pop context.s, pop context.s with
-		BOOL(b1), BOOL(b2) -> push context.s (BOOL(op b1 b2))
-		| _ -> invalid_arg "Invalid operand type."
-;;
-
-let have_same_type a b =
-	match a, b with
-		INT(_), INT(_) | FLOAT(_), FLOAT(_) | STR(_), STR(_) -> true
-		| _ -> false
-;;
-
-
-let rec process_instruction context instruction =
-	match instruction with
-		NOP -> ()
-		
-		| POP -> utils__ignore(pop context.s)
-		| PUSH(val) -> push context.s val
-		| STORE(key) -> add context.env key (pop context.s)
-		| LOAD(key) -> push context.s (get context.env key)
-		
-		| ADD -> let int_add a b = a + b and float_add a b = a +. b in process_arithmetic_binop context int_add float_add
-		| SUB -> let int_sub a b = a - b and float_sub a b = a -. b in process_arithmetic_binop context int_sub float_sub
-		| MUL -> let int_mul a b = a * b and float_mul a b = a *. b in process_arithmetic_binop context int_mul float_mul
-		| DIV -> let int_div a b = a / b and float_div a b = a /. b in process_arithmetic_binop context int_div float_div
-		| MOD -> (
-				match pop context.s, pop context.s with
-					| INT(i1), INT(i2) -> push context.s (INT(i1 mod i2))
-					| _ -> invalid_arg "Invalid operand type."
-			)
-		| UNARY_MINUS -> (
-					match pop context.s with
-						INT(i) -> push context.s (INT(-i))
-						| FLOAT(f) -> push context.s (FLOAT(-.f))
-						| _ -> invalid_arg "Invalid operand type."
-				)
-		
-		| AND -> process_boolean_binop context (fun b1 b2 -> b1 & b2)
-		| OR -> process_boolean_binop context (fun b1 b2 -> b1 or b2)
-		| NOT -> (
-				match pop context.s with
-					BOOL(b) -> push context.s (BOOL(not b))
-					| _ -> invalid_arg "Invalid operand type."
-			)
-
-		| EQ -> let a = pop context.s in
-			let b = pop context.s in
-			if have_same_type a b then
-				push context.s (BOOL(a = b))
-			else
-				invalid_arg "Invalid operand type."
-		| NE -> let a = pop context.s in
-			let b = pop context.s in
-			if have_same_type a b then
-				push context.s (BOOL(a <> b))
-			else
-				invalid_arg "Invalid operand type."
-		| LT -> let a = pop context.s in
-			let b = pop context.s in
-			if have_same_type a b then
-				push context.s (BOOL(a < b))
-			else
-				invalid_arg "Invalid operand type."
-		| LE -> let a = pop context.s in
-			let b = pop context.s in
-			if have_same_type a b then
-				push context.s (BOOL(a <= b))
-			else
-				invalid_arg "Invalid operand type."
-		| GT -> let a = pop context.s in
-			let b = pop context.s in
-			if have_same_type a b then
-				push context.s (BOOL(a > b))
-			else
-				invalid_arg "Invalid operand type."
-		| GE -> let a = pop context.s in
-			let b = pop context.s in
-			if have_same_type a b then
-				push context.s (BOOL(a >= b))
-			else
-				invalid_arg "Invalid operand type."
-
-		| PRINT -> (
-				print_string ">>> ";
-				match top context.s with
-					INT(i) -> print_int i
-					| FLOAT(f) -> print_float f
-					| STR(s) -> print_string s
-					| BOOL(b) -> print_string (string_of_bool b)
-				;
-				print_newline()
-			)
-
-		| BRANCH(code_true, code_false) -> (
-							match pop context.s with
-								BOOL(true) -> process_code context code_true
-								| BOOL(false) -> process_code context code_false
-								| _ -> invalid_arg "Invalid operand type."
-						)
-		
-		| WHILE(code) -> (
-					match pop context.s with
-						BOOL(true) -> process_code context code; process_code context [WHILE(code)]
-						| BOOL(false) -> ()
-						| _ -> invalid_arg "Invalid operand type."
-				)
-
-and process_code context code =
-	match code with
-		[] -> ()
-		| instruction::q -> process_instruction context instruction; process_code context q
-;;
+load "stack.ml";;
+load "dict.ml";;
+load "utils.ml";;
 
-let get_new_default_context() = {s = make_stack(); env = make_dict()};;
+#open "io";;
+#open "stack";;
+#open "dict";;
+#open "utils";;
+
+type types = INT of int | FLOAT of float | STR of string | BOOL of bool;;
+
+type instructions =
+	NOP | POP | PUSH of types | STORE of string | LOAD of string
+	| ADD | SUB | MUL | DIV | MOD
+	| UNARY_MINUS | INCR | DECR
+	| AND | OR | NOT
+	| EQ | NE | LT | LE | GT | GE
+	| PRINT
+	| BRANCH of code * code
+	| WHILE of code
+	| TO_INT
+	| TO_FLOAT
+	| TO_STR
+	| TO_BOOL
+	| INPUT
 
-#close "io";;
-#close "stack";;
-#close "dict";;
-#close "utils";;
+and code == instructions list
+;;
+
+type context = {s : types stack; env : types dict};;
+
+let identity x = x;;
+
+let have_same_type a b =
+	match a, b with
+		INT(_), INT(_) | FLOAT(_), FLOAT(_) | STR(_), STR(_) | BOOL(_), BOOL(_) -> true
+		| _ -> false
+;;
+
+let process_arithmetic_binop context int_op float_op =
+	match pop context.s, pop context.s with
+		INT(i1), INT(i2) -> push context.s (INT(int_op i1 i2))
+		| FLOAT(f1), FLOAT(f2) -> push context.s (FLOAT(float_op f1 f2))
+		| _ -> invalid_arg "Invalid operand type : expected (INT, INT) or (FLOAT, FLOAT)."
+;;
+
+let process_boolean_binop context op =
+	match pop context.s, pop context.s with
+		BOOL(b1), BOOL(b2) -> push context.s (BOOL(op b1 b2))
+		| _ -> invalid_arg "Invalid operand type : "
+;;
+
+let process_comparison_binop context op =
+	let b = pop context.s in
+	let a = pop context.s in
+	if have_same_type a b then
+		push context.s (BOOL(op a b))
+	else
+		invalid_arg "Invalid operand type."
+;;
+
+let rec process_conversion context constr from_int from_float from_str from_bool =
+	match pop context.s with
+		| INT(i) -> push context.s (constr(from_int i))
+		| FLOAT(f) -> push context.s (constr(from_float f))
+		| STR(s) -> push context.s (constr(from_string s))
+		| BOOL(b) -> push context.s (constr(from_bool b))
+;;
+
+let rec process_instruction context instruction =
+	match instruction with
+		NOP -> ()
+		
+		| POP -> utils__ignore(pop context.s)
+		| PUSH(val) -> push context.s val
+		| STORE(key) -> add context.env key (pop context.s)
+		| LOAD(key) -> push context.s (get context.env key)
+		
+		| ADD -> let int_add a b = a + b and float_add a b = a +. b in process_arithmetic_binop context int_add float_add
+		| SUB -> let int_sub a b = a - b and float_sub a b = a -. b in process_arithmetic_binop context int_sub float_sub
+		| MUL -> let int_mul a b = a * b and float_mul a b = a *. b in process_arithmetic_binop context int_mul float_mul
+		| DIV -> let int_div a b = a / b and float_div a b = a /. b in process_arithmetic_binop context int_div float_div
+		| MOD -> (
+				match pop context.s, pop context.s with
+					| INT(i1), INT(i2) -> push context.s (INT(i1 mod i2))
+					| _ -> invalid_arg "Invalid operand type."
+			)
+		| UNARY_MINUS -> (
+					match pop context.s with
+						INT(i) -> push context.s (INT(-i))
+						| FLOAT(f) -> push context.s (FLOAT(-.f))
+						| _ -> invalid_arg "Invalid operand type."
+				)
+		| INCR ->
+			begin
+				match pop context.s with
+					| INT(i) -> push context.s (INT(i + 1))
+					| _ -> invalid_arg "Invalid operand type."
+			end
+		| DECR ->
+			begin
+				match pop context.s with
+					| INT(i) -> push context.s (INT(i - 1))
+					| _ -> invalid_arg "Invalid operand type."
+			end
+		
+		| AND -> process_boolean_binop context (fun b1 b2 -> b1 & b2)
+		| OR -> process_boolean_binop context (fun b1 b2 -> b1 or b2)
+		| NOT -> (
+				match pop context.s with
+					BOOL(b) -> push context.s (BOOL(not b))
+					| _ -> invalid_arg "Invalid operand type."
+			)
+
+		| EQ -> let op a b = a = b in process_comparison_binop context op
+		| NE -> let op a b = a <> b in process_comparison_binop context op
+		| LT -> let op a b = a < b in process_comparison_binop context op
+		| LE -> let op a b = a <= b in process_comparison_binop context op
+		| GT -> let op a b = a > b in process_comparison_binop context op
+		| GE -> let op a b = a >= b in process_comparison_binop context op
+
+		| PRINT ->
+			(
+				print_string ">>> ";
+				match top context.s with
+					INT(i) -> print_int i
+					| FLOAT(f) -> print_float f
+					| STR(s) -> print_string s
+					| BOOL(b) -> print_string (string_of_bool b)
+			);
+				print_newline()
+
+		| BRANCH(code_true, code_false) -> (
+							match pop context.s with
+								BOOL(true) -> process_code context code_true
+								| BOOL(false) -> process_code context code_false
+								| _ -> invalid_arg "Invalid operand type."
+						)
+		
+		| WHILE(code) -> (
+					match pop context.s with
+						BOOL(true) -> process_code context code; process_code context [WHILE(code)]
+						| BOOL(false) -> ()
+						| _ -> invalid_arg "Invalid operand type."
+				)
+
+		| TO_INT ->
+			begin
+				let from_bool b = if b then 1 else 0 in
+				process_conversion context INT identity int_of_float int_of_string from_bool
+			end
+		| TO_FLOAT ->
+			begin
+				let from_bool b = if b then 1. else 0. in
+				process_conversion context FLOAT float_of_int identity float_of_string from_bool
+			end
+		| TO_STR -> process_conversion context STR string_of_int string_of_float identity string_of_bool
+		| TO_BOOL ->
+			begin
+				let from_int i = if i = 0 then false else true in
+				let from_float f = if f = 0. then false else true in
+				let from_string s = if string_length s = 0 then false else true in
+				process_conversion context BOOL from_int from_float from_string identity
+			end
+
+		| INPUT -> push context.s (STR(read_line()))
+
+and process_code context code =
+	match code with
+		[] -> ()
+		| instruction::q -> process_instruction context instruction; process_code context q
+;;
+
+let get_new_default_context() = {s = make_stack(); env = make_dict()};;
+
+#close "io";;
+#close "stack";;
+#close "dict";;
+#close "utils";;
